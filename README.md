@@ -14,5 +14,9 @@ If you wish to train the model yourself, you will need to modify the code in Sec
 
    This will activate the training process using the specified `MODELTYPE`.
 3. Run the notebook starting from Section 4 to initiate training.
+4. Uncomment main(0) in the evaluation section
 
 Follow these steps to customize the execution of the pipeline according to your needs.
+
+## How to Run the Ablation Study
+
