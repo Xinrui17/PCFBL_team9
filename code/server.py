@@ -17,12 +17,15 @@ from joblib import dump, load
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import SpectralClustering
 
-PATH_DATA = '/home/xhe33/pcfbl/'
-PATH_FL_SCRIPT = '/home/xhe33/pcfbl/code/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+PATH_FL_SCRIPT = '/home/xhe34/PCFBL_team9/code/'
 FT_TYPES = ['meds', 'dx', 'physio']
 DIMS = {'meds':1056, 'dx':483, 'physio': 7}
 HOSPITALS=[264,142,148,281,154,283,157,420,165,167,176,449,199,458,338,227,248,122,252]
 N_CLUSTERS = 3
+
+SUFFIX=''   # '_raw' for ablation study 1, '_kmeans' for ablation study 2
+
 #MODELS
 class FeedForward(nn.Module):
     def __init__(self, input_dim_drugs, input_dim_dx, input_dim_physio):
@@ -91,7 +94,7 @@ def FedAvg(hospitals, global_model, model):
     hosps_included = []
     try: 
         for i, hosp in enumerate(hospitals.index):
-            hospital_params = torch.load(f'{PATH}{hosp}/{model}.pt')
+            hospital_params = torch.load(f'{PATH}{hosp}/{model}{SUFFIX}.pt')
             hospital_params_list.append(hospital_params)
             hosps_included.append(hosp)
     except:
@@ -137,7 +140,7 @@ def runFedAvg(hospitals, model, mode):
 
 #weight input by cluster size
 def load_cluster_weights(PATH, hosp):
-    cluster = pd.read_csv(f'{PATH}{hosp}/clusters.csv')
+    cluster = pd.read_csv(f'{PATH}{hosp}/clusters{SUFFIX}.csv')
     cluster_weights = cluster.value_counts('cluster')
     cluster_df = pd.DataFrame(cluster_weights, columns = ['count'])
     cluster_df['site'] = hosp
@@ -193,10 +196,10 @@ def run_prediction(hospitals, iteration, MODE):
     dim0, dim1, dim2 = list(DIMS.values())
     initial_model = FeedForward(dim0, dim1, dim2)
     for hosp in hospitals.index:
-        site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters', dtype = int)
+        site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters{SUFFIX}', dtype = int)
         site_clusters = np.atleast_1d(site_clusters)
         for i in site_clusters:
-            torch.save(initial_model.state_dict(), f'{PATH}{hosp}/{MODEL}_cluster_{i}.pt')
+            torch.save(initial_model.state_dict(), f'{PATH}{hosp}/{MODEL}_cluster_{i}{SUFFIX}.pt')
 
             
     ##Run prediction models for multiple rounds
@@ -212,19 +215,19 @@ def run_prediction(hospitals, iteration, MODE):
         global_models = runFedAvg(hospitals, MODEL, MODE)
         #save
         for hosp in hospitals.index:
-            site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters', dtype = int)
+            site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters{SUFFIX}', dtype = int)
             site_clusters = np.atleast_1d(site_clusters)
             for i in site_clusters:
                 global_model = global_models[i]
-                torch.save(global_model.state_dict(), f'{PATH}{hosp}/prediction_cluster_{i}.pt') 
+                torch.save(global_model.state_dict(), f'{PATH}{hosp}/prediction_cluster_{i}{SUFFIX}.pt') 
 
    ##After training save global model for inference
     for hosp in hospitals.index:
-        site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters', dtype = int)
+        site_clusters = np.loadtxt(f'{PATH}{hosp}/site_clusters{SUFFIX}', dtype = int)
         site_clusters = np.atleast_1d(site_clusters)
         for i in site_clusters:
             global_model = global_models[i]
-            torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_prediction_cluster_{i}.pt') 
+            torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_prediction_cluster_{i}{SUFFIX}.pt') 
 
     ##Inference   
     RUN = 'test'
@@ -238,8 +241,8 @@ def run_prediction(hospitals, iteration, MODE):
     results = pd.DataFrame(columns = ['cluster', 'AUC', 'site'])
     results_auprc = pd.DataFrame(columns = ['cluster', 'AUPRC', 'site'])
     for hosp in hospitals.index:
-        result_site = pd.read_csv( f'{PATH}{hosp}/results.csv')
-        result_site_auprc = pd.read_csv( f'{PATH}{hosp}/results_auprc.csv')
+        result_site = pd.read_csv( f'{PATH}{hosp}/results{SUFFIX}.csv')
+        result_site_auprc = pd.read_csv( f'{PATH}{hosp}/results_auprc{SUFFIX}.csv')
         result_site['site'] = hosp
         result_site_auprc['site'] = hosp
         results = pd.concat([results, result_site])
@@ -251,8 +254,8 @@ def run_prediction(hospitals, iteration, MODE):
         return run_prediction(hospitals, iteration, MODE)
     else:
         ##Save results
-        results.to_csv(f'{PATH}{TASK}_results_{iteration}.csv', index = False)
-        results_auprc.to_csv(f'{PATH}{TASK}_results_auprc_{iteration}.csv', index = False)
+        results.to_csv(f'{PATH}{TASK}_results_{iteration}{SUFFIX}.csv', index = False)
+        results_auprc.to_csv(f'{PATH}{TASK}_results_auprc_{iteration}{SUFFIX}.csv', index = False)
         return
 
 
@@ -266,7 +269,7 @@ def run_prediction_avg(hospitals, iteration, MODE):
     dim0, dim1, dim2 = list(DIMS.values())
     initial_model = FeedForward(dim0, dim1, dim2)
     for hosp in hospitals.index:
-        torch.save(initial_model.state_dict(), f'{PATH}{hosp}/{MODEL}.pt')
+        torch.save(initial_model.state_dict(), f'{PATH}{hosp}/{MODEL}{SUFFIX}.pt')
 
             
     ##Run prediction models for multiple rounds
@@ -282,11 +285,11 @@ def run_prediction_avg(hospitals, iteration, MODE):
         global_model = runFedAvg(hospitals, MODEL, MODE)
         #save
         for hosp in hospitals.index:
-            torch.save(global_model.state_dict(), f'{PATH}{hosp}/prediction.pt') 
+            torch.save(global_model.state_dict(), f'{PATH}{hosp}/prediction{SUFFIX}.pt') 
 
    ##After training save global model for inference
     for hosp in hospitals.index:
-        torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_prediction.pt') 
+        torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_prediction{SUFFIX}.pt') 
 
     ##Inference   
     RUN = 'test'
@@ -300,8 +303,8 @@ def run_prediction_avg(hospitals, iteration, MODE):
     results = pd.DataFrame(columns = ['site', 'AUC'])
     results_auprc = pd.DataFrame(columns = ['site', 'AUPRC'])
     for hosp in hospitals.index:
-        result_site = pd.read_csv( f'{PATH}{hosp}/results.csv')
-        result_site_auprc = pd.read_csv( f'{PATH}{hosp}/results_auprc.csv')
+        result_site = pd.read_csv( f'{PATH}{hosp}/results{SUFFIX}.csv')
+        result_site_auprc = pd.read_csv( f'{PATH}{hosp}/results_auprc{SUFFIX}.csv')
         results = pd.concat([results, result_site])
         results_auprc = pd.concat([results_auprc, result_site_auprc])
 
@@ -314,8 +317,8 @@ def run_prediction_avg(hospitals, iteration, MODE):
             return run_prediction(hospitals, iteration, MODE)
     else:
         ##Save results
-        results.to_csv(f'{PATH}{TASK}_{MODELTYPE}_results_{iteration}.csv', index = False)
-        results_auprc.to_csv(f'{PATH}{TASK}_{MODELTYPE}_results_auprc_{iteration}.csv', index = False)
+        results.to_csv(f'{PATH}{TASK}_{MODELTYPE}_results_{iteration}{SUFFIX}.csv', index = False)
+        results_auprc.to_csv(f'{PATH}{TASK}_{MODELTYPE}_results_auprc_{iteration}{SUFFIX}.csv', index = False)
         return
 
 def main(iteration):
@@ -327,7 +330,7 @@ def main(iteration):
         run_prediction(hospitals, iteration, MODE)
     else:
         if (MODELTYPE  == 'emb') | (MODELTYPE  == 'p_cbfl'):
-            #run_private_clustering(MODELTYPE)
+            # run_private_clustering(MODELTYPE)
             MODE = 'cluster'
             run_prediction(hospitals, iteration, MODE)
         elif MODELTYPE == 'avg':
@@ -337,8 +340,11 @@ def main(iteration):
     
 
 if __name__ == '__main__':
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mt', '--modeltype', default = 'emb')
+    parser.add_argument('-mt', '--modeltype', default = 'p_cbfl')
     
     args = parser.parse_args()
     global MODELTYPE
@@ -346,15 +352,15 @@ if __name__ == '__main__':
 
     global PATH
     if MODELTYPE == 'emb':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif MODELTYPE =='cbfl':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif MODELTYPE =='p_cbfl':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif MODELTYPE == 'avg':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
 
 
-    for iteration in range(100):
+    for iteration in range(5):
         main(iteration)
     

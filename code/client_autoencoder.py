@@ -23,9 +23,11 @@ FT_TYPES = ['meds', 'dx', 'physio']
 
 #LOAD DATA
 global PATH
-PATH = '/home/xhe33/pcfbl/'
+PATH = '/home/xhe34/PCFBL_team9/'
 global PATH_DATA
-PATH_DATA = '/home/xhe33/pcfbl/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+
+SUFFIX=''   # '_raw' for ablation study 1, '_kmeans' for ablation study 2
 
 def minmaxscale(column):
    max_, min_ = column.max(), column.min()
@@ -155,7 +157,7 @@ def get_emb(features, feat_type):
     dim = features.shape[1]
     model = Autoencoder(dim)
     # load global model
-    model.load_state_dict(torch.load(f'{PATH}{hospid}/global_autoencoder_{feat_type}.pt'))
+    model.load_state_dict(torch.load(f'{PATH}{hospid}/global_autoencoder_{feat_type}{SUFFIX}.pt'))
     model.eval()
     embeddings = model.get_embedding(features_tensor)
     embeddings = embeddings.detach().numpy()
@@ -197,6 +199,7 @@ def main():
     
     # Load data
     drugs_f, dx_f, physio_f, dem, mortality = load_data(hospid)
+    print(drugs_f.shape, physio_f.shape, dx_f.shape)
     features = {'meds':drugs_f, "dx": dx_f, "physio": physio_f}
     
     if run == 'train':
@@ -205,17 +208,24 @@ def main():
             model = train_model(features[feat_type])
             # Save model
             model.cpu()
-            torch.save(model.state_dict(), f'{PATH}{hospid}/autoencoder_{feat_type}.pt')
+            torch.save(model.state_dict(), f'{PATH}{hospid}/autoencoder_{feat_type}{SUFFIX}.pt')
         print(f'{hospid} completed')
     
     elif run == 'embed':
         feat_embs = {}
+        feat_embs_pat = {}
         for feat_type in FT_TYPES:
             ##get embs
-            emb = get_emb(features[feat_type], feat_type)
+            if SUFFIX == '_raw':
+                emb = features[feat_type]
+            else:
+                emb = get_emb(features[feat_type], feat_type)
             feat_embs[feat_type] = emb.mean(axis  = 0)
+            feat_embs_pat[feat_type] = emb
         avg_emb = np.concatenate(list(feat_embs.values()))
-        np.savetxt(f'{PATH}{hospid}/avgembedding', avg_emb, fmt = '%.9e')
+        embs = np.concatenate(list(feat_embs_pat.values()), axis  = 1)
+        np.savetxt(f'{PATH}{hospid}/embedding{SUFFIX}', embs, fmt = '%.9e')
+        np.savetxt(f'{PATH}{hospid}/avgembedding{SUFFIX}', avg_emb, fmt = '%.9e')
             
     else:
         feat_embs = {}
@@ -224,9 +234,9 @@ def main():
             feat_embs[feat_type] = get_emb(features[feat_type], feat_type)
         avg_emb = np.concatenate(list(feat_embs.values()), axis = 1)
         clusters = cluster_patients(list(features.values())[0], avg_emb)
-        clusters.to_csv(f'{PATH}{hospid}/clusters.csv', index = False)
+        clusters.to_csv(f'{PATH}{hospid}/clusters{SUFFIX}.csv', index = False)
         site_cluster = clusters['cluster'].unique()
-        np.savetxt(f'{PATH}{hospid}/site_clusters', site_cluster, fmt ='%i')
+        np.savetxt(f'{PATH}{hospid}/site_clusters{SUFFIX}', site_cluster, fmt ='%i')
       
     print(f'{hospid} COMPLETED TRAINING ROUND')
     

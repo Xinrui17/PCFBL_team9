@@ -19,9 +19,9 @@ import os
 
 
 global PATH
-PATH = '/home/xhe33/pcfbl/'
-PATH_DATA = '/home/xhe33/pcfbl/'
-PATH_FL_SCRIPT = '/home/xhe33/pcfbl/code/'
+PATH = '/home/xhe34/PCFBL_team9/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+PATH_FL_SCRIPT = '/home/xhe34/PCFBL_team9/code/'
 N_CLUSTERS = 3
 FT_TYPES = ['meds', 'dx', 'physio']
 DIMS = {'meds':1056, 'dx':483, 'physio': 7}

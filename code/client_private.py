@@ -13,10 +13,12 @@ import os
 
 HOSPITALS=[264,142,148,281,154,283,157,420,165,167,176,449,199,458,79,338,227,248,122,252]
 EMB_DIM = 36
-PATH_DATA = '/home/xhe33/pcfbl/'
-PATH_FL_SCRIPT = '/home/xhe33/pcfbl/code/'
-PATH = '/home/xhe33/pcfbl/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+PATH_FL_SCRIPT = '/home/xhe34/PCFBL_team9/code/'
+PATH = '/home/xhe34/PCFBL_team9/'
 AVAIL_LETTERS = {0: ['A', 'B'], 1: ['C', 'D']}
+
+SUFFIX=''   # '_raw' for ablation study 1, '_kmeans' for ablation study 2
 
 #get hospital pair combinations
 HOSPITAL_PAIRS = list(itertools.combinations(HOSPITALS,2))
@@ -53,10 +55,10 @@ def run_mat_calculation(hospid):
     for comb in COMBINATIONS[hospid]:
         POSITION = check_position(comb, hospid)
         #load matrix
-        with open(f'{PATH}private/matrix_{comb}.pkl', 'rb') as file:
+        with open(f'{PATH}private/matrix_{comb}{SUFFIX}.pkl', 'rb') as file:
             matrix = pickle.load(file)
         #Load embedding
-        embedding = pd.read_csv(f'{PATH}{hospid}/embedding.csv', index_col = 'patientunitstayid')
+        embedding = np.loadtxt(f'{PATH}{hospid}/embedding{SUFFIX}')
         embedding = normalize(embedding, norm = 'l2', axis = 1)
         #Calculate half matrices
         X1, X2 = multipartyComp(embedding.T, matrix[int(hospid)], POSITION)
@@ -101,7 +103,7 @@ def main():
         run_dot_calculation(hospid)
         
         #own patients
-        embedding = pd.read_csv(f'{PATH}{hospid}/embedding.csv', index_col = 'patientunitstayid')
+        embedding = np.loadtxt(f'{PATH}{hospid}/embedding{SUFFIX}')
         cos_sim = cosine_similarity(embedding)
         np.savetxt(f'{PATH}private/matrix_{hospid}_sim', cos_sim)
 

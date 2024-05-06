@@ -22,7 +22,8 @@ torch.manual_seed(0)
 
 #LOAD DATA
 global PATH_DATA
-PATH_DATA = '/home/xhe33/pcfbl/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+SUFFIX=''   # '_raw' for ablation study 1, '_kmeans' for ablation study 2
 
 def minmaxscale(column):
  max_, min_ = column.max(), column.min()
@@ -48,6 +49,7 @@ def load_dataset(features_, outcome):
     train_size = int(TRAIN_SIZE * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size], generator=torch.Generator().manual_seed(42))
+    if len(dataset) == 1: train_dataset = test_dataset
 
     #load onto dataloader
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
@@ -124,7 +126,7 @@ def train_model(features, outcome):
     # load model
     dims = [features[f].shape[1] for f in FT_TYPES]
     model = FeedForward(dims[0], dims[1], dims[2])
-    model.load_state_dict(torch.load(f'{PATH}{hospid}/prediction.pt'))
+    model.load_state_dict(torch.load(f'{PATH}{hospid}/prediction{SUFFIX}.pt'))
     model.to(device)
     optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE, betas=BETAS)
     loss_fn = nn.BCELoss()
@@ -160,7 +162,7 @@ def test_model(features, outcome):
     # load global model
     dims = [features[f].shape[1] for f in FT_TYPES]
     model = FeedForward(dims[0], dims[1], dims[2])
-    model.load_state_dict(torch.load(f'{PATH}{hospid}/global_prediction.pt'))
+    model.load_state_dict(torch.load(f'{PATH}{hospid}/global_prediction{SUFFIX}.pt'))
     model.to(device)
     model.eval()
     # test global model
@@ -194,7 +196,7 @@ def train_model_c(features, outcome, clusters):
         # load model
         dims = [features[f].shape[1] for f in FT_TYPES]
         model = FeedForward(dims[0], dims[1], dims[2])
-        model.load_state_dict(torch.load(f'{PATH}{hospid}/prediction_cluster_{i}.pt'))
+        model.load_state_dict(torch.load(f'{PATH}{hospid}/prediction_cluster_{i}{SUFFIX}.pt'))
         model.to(device)
         optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE, betas=BETAS)
         loss_fn = nn.BCELoss()
@@ -239,7 +241,7 @@ def test_model_c(features, outcome, clusters):
         # load global model
         dims = [features[f].shape[1] for f in FT_TYPES]
         model = FeedForward(dims[0], dims[1], dims[2])
-        model.load_state_dict(torch.load(f'{PATH}{hospid}/global_prediction_cluster_{i}.pt'))
+        model.load_state_dict(torch.load(f'{PATH}{hospid}/global_prediction_cluster_{i}{SUFFIX}.pt'))
         model.to(device)
         model.eval()
         # test global model
@@ -281,13 +283,13 @@ def main():
     
     global PATH
     if modeltype == 'emb':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif modeltype =='cbfl':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif modeltype =='p_cbfl':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif modeltype == 'avg':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
 
     # Load data
     drugs_f, dx_f, physio_f, dem, outcome = load_data(hospid)
@@ -295,7 +297,7 @@ def main():
     
     if modeltype != 'avg':
         global SITE_CLUSTER
-        clusters = pd.read_csv(f'{PATH}{hospid}/clusters.csv')
+        clusters = pd.read_csv(f'{PATH}{hospid}/clusters{SUFFIX}.csv')
         SITE_CLUSTER = clusters['cluster'].unique()
     
         if run == 'train':
@@ -305,7 +307,7 @@ def main():
             for i in SITE_CLUSTER:
                 model = cluster_models[i]
                 model.cpu()
-                torch.save(model.state_dict(), f'{PATH}{hospid}/prediction_cluster_{i}.pt')
+                torch.save(model.state_dict(), f'{PATH}{hospid}/prediction_cluster_{i}{SUFFIX}.pt')
             print(f'{hospid} completed')
         
         elif run == 'test':
@@ -319,15 +321,15 @@ def main():
             auprc = pd.DataFrame.from_dict(cluster_auprc, orient = 'index', 
                                     columns = ['AUPRC']).reset_index().rename(
                                     columns={'index': 'cluster'})
-            auc.to_csv(f'{PATH}{hospid}/results.csv', index = False)
-            auprc.to_csv(f'{PATH}{hospid}/results_auprc.csv', index = False)
+            auc.to_csv(f'{PATH}{hospid}/results{SUFFIX}.csv', index = False)
+            auprc.to_csv(f'{PATH}{hospid}/results_auprc{SUFFIX}.csv', index = False)
         
     elif modeltype == 'avg':
         if run == 'train':
             # Train models
             model = train_model(features, outcome)
             model.cpu()
-            torch.save(model.state_dict(), f'{PATH}{hospid}/prediction.pt')
+            torch.save(model.state_dict(), f'{PATH}{hospid}/prediction{SUFFIX}.pt')
             print(f'{hospid} completed')
         
         elif run == 'test':
@@ -336,8 +338,8 @@ def main():
             #Save results
             auc = pd.DataFrame([[hospid, auc]], columns = ['site', 'AUC'])
             auprc = pd.DataFrame([[hospid, auprc]], columns = ['site', 'AUPRC'])
-            auc.to_csv(f'{PATH}{hospid}/results.csv', index = False)
-            auprc.to_csv(f'{PATH}{hospid}/results_auprc.csv', index = False)
+            auc.to_csv(f'{PATH}{hospid}/results{SUFFIX}.csv', index = False)
+            auprc.to_csv(f'{PATH}{hospid}/results_auprc{SUFFIX}.csv', index = False)
     
     print(f'{hospid} COMPLETED TRAINING ROUND')
     

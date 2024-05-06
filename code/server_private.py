@@ -7,7 +7,7 @@ import sympy as sym
 import concurrent.futures
 import argparse
 import subprocess
-from sklearn.cluster import SpectralClustering
+from sklearn.cluster import SpectralClustering, KMeans
 import itertools
 import os
 import torch
@@ -21,11 +21,13 @@ HOSPITALS=[264,142,148,281,154,283,157,420,165,167,176,449,199,458,79,338,227,24
 NPATIENTS = 250
 EMB_DIM = 36
 N_CLUSTERS = 3
-PATH_DATA = '/home/xhe33/pcfbl/'
-PATH_FL_SCRIPT = '/home/xhe33/pcfbl/code/'
+PATH_DATA = '/home/xhe34/PCFBL_team9/'
+PATH_FL_SCRIPT = '/home/xhe34/PCFBL_team9/code/'
 FT_TYPES = ['meds', 'dx', 'physio']
 DIMS = {'meds':1056, 'dx':483, 'physio': 7}
 EPOCHS = 20
+
+SUFFIX=''   # '_raw' for ablation study 1, '_kmeans' for ablation study 2
 
 ##Embedding
 #MODELS
@@ -73,7 +75,7 @@ def FedAvg(hospitals, global_model, model):
 
     hospital_params_list = []
     for i, hosp in enumerate(hospitals.index):
-        hospital_params = torch.load(f'{PATH}{hosp}/{model}.pt')
+        hospital_params = torch.load(f'{PATH}{hosp}/{model}{SUFFIX}.pt')
         hospital_params_list.append(hospital_params)
 
     # Compute the weighted average of the model parameters
@@ -103,7 +105,7 @@ def clear_clients(hosp, model):
     subprocess.call(command, shell = True)
     return
 
-def run_clients(hosp, model, run):
+def run_clients_autoencoder(hosp, model, run):
     command = f'python {PATH_FL_SCRIPT}client_{model}.py -cl={hosp} -rn={run}'
     command = command.split(' ')
     output = subprocess.check_output(command) 
@@ -120,7 +122,7 @@ def run_autoencoder(hospitals):
         futures = []
         with concurrent.futures.ProcessPoolExecutor() as executor:
             for hosp in hospitals.index:
-                futures.append(executor.submit(run_clients, hosp, MODEL, RUN))
+                futures.append(executor.submit(run_clients_autoencoder, hosp, MODEL, RUN))
         concurrent.futures.wait(futures)
 
         ##Average
@@ -128,7 +130,7 @@ def run_autoencoder(hospitals):
             global_model = runFedAvg(hospitals, MODEL, feat)
             ##save
             for hosp in hospitals.index:
-                torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_autoencoder_{feat}.pt')
+                torch.save(global_model.state_dict(), f'{PATH}{hosp}/global_autoencoder_{feat}{SUFFIX}.pt')
 
 
     ##Embed patients
@@ -136,7 +138,7 @@ def run_autoencoder(hospitals):
     futures = []
     with concurrent.futures.ProcessPoolExecutor() as executor:
         for hosp in hospitals.index:
-            futures.append(executor.submit(run_clients,hosp, MODEL, RUN))
+            futures.append(executor.submit(run_clients_autoencoder,hosp, MODEL, RUN))
     concurrent.futures.wait(futures)
 
 def set_seed(seed: int = 42) -> None:
@@ -187,7 +189,7 @@ def generate_client_matrices():
         hospital_matrices = {}
         hospital_matrices[pair[0]] = [A,B]
         hospital_matrices[pair[1]] = [C,D]
-        with open(f'{PATH}private/matrix_{pair[0]}_{pair[1]}.pkl', 'wb') as file:
+        with open(f'{PATH}private/matrix_{pair[0]}_{pair[1]}{SUFFIX}.pkl', 'wb') as file:
             pickle.dump(hospital_matrices, file)
     return
 
@@ -225,7 +227,7 @@ def cos_sim_matrix(dotproducts):
                 mat = dotproducts[(hosp2, hosp1)]
             cos_sim[i*NPATIENTS:(i+1)*NPATIENTS, j*NPATIENTS:(j+1)*NPATIENTS] = mat.T
             cos_sim[j*NPATIENTS:(j+1)*NPATIENTS, i*NPATIENTS:(i+1)*NPATIENTS] = mat
-    np.savetxt(f'{PATH}private/cos_sim', cos_sim)
+    np.savetxt(f'{PATH}private/cos_sim{SUFFIX}', cos_sim)
     return cos_sim
 
 
@@ -235,16 +237,24 @@ def cluster_patients(cos_sim):
         patients = pd.read_csv(f'{PATH_DATA}{hospid}/mortality.csv', usecols = ['patientunitstayid', 'hospitalid'])
         patients_all = pd.concat([patients_all, patients])
 
-    cos_sim = pd.DataFrame(cos_sim, index = patients_all['patientunitstayid'], columns = patients_all['patientunitstayid'])
-    # conduct spectral clustering i.e. k-means on the eigenvectors of the matrix
-    sc = SpectralClustering(n_clusters=N_CLUSTERS, affinity='precomputed', eigen_solver='arpack', random_state = 1)
-    clusters = sc.fit_predict(cos_sim)
+    if SUFFIX == 'kmeans':
+        embeddings = np.array([]).reshape(0,36)
+        for hospid in HOSPITALS:
+            embedding = np.loadtxt(f'{PATH}{hospid}/embedding{SUFFIX}')
+            embeddings = np.concatenate([embeddings, embedding])
+        sc = KMeans(n_clusters=N_CLUSTERS, random_state = 1)
+        clusters = sc.fit_predict(embeddings)
+    else:
+        cos_sim = pd.DataFrame(cos_sim, index = patients_all['patientunitstayid'], columns = patients_all['patientunitstayid'])
+        # conduct spectral clustering i.e. k-means on the eigenvectors of the matrix
+        sc = SpectralClustering(n_clusters=N_CLUSTERS, affinity='precomputed', eigen_solver='arpack', random_state = 1)
+        clusters = sc.fit_predict(cos_sim)
     patients_all['cluster'] = clusters
 
     for hospid in HOSPITALS:
         cluster_hosp = patients_all[['patientunitstayid', 'cluster']][patients_all['hospitalid'] == hospid]
-        cluster_hosp.to_csv(f'{PATH}{hospid}/clusters.csv', index = False)
-        np.savetxt(f'{PATH}{hospid}/site_clusters', cluster_hosp['cluster'].unique(), fmt = '%i')
+        cluster_hosp.to_csv(f'{PATH}{hospid}/clusters{SUFFIX}.csv', index = False)
+        np.savetxt(f'{PATH}{hospid}/site_clusters{SUFFIX}', cluster_hosp['cluster'].unique(), fmt = '%i')
     return
 
 def set_seed(seed: int = 42) -> None:
@@ -260,32 +270,41 @@ def main():
     hospitals['weight'] = hospitals['count'] / hospitals['count'].sum()
     run_autoencoder(hospitals)
 
-    #PRIVACY
-    #generate matrices
-    generate_client_matrices()
+    if SUFFIX != 'raw':
+        #PRIVACY
+        #generate matrices
+        generate_client_matrices()
 
-    #client calculations
-    task = 'matrix'
-    futures = [] 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        for hosp in HOSPITALS:
-            futures.append(executor.submit(run_clients, hosp, task))
-    concurrent.futures.wait(futures)
-
-
-    #client calculations
-    task = 'dot'
-    futures = [] 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        for hosp in HOSPITALS:
-            futures.append(executor.submit(run_clients, hosp, task))
-    concurrent.futures.wait(futures)
+        #client calculations
+        task = 'matrix'
+        futures = [] 
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            for hosp in HOSPITALS:
+                futures.append(executor.submit(run_clients, hosp, task))
+        concurrent.futures.wait(futures)
 
 
-    #calculate dot products
-    dotproducts  = privateDotproduct()
-    #get matrix
-    cos_sim = cos_sim_matrix(dotproducts)
+        #client calculations
+        task = 'dot'
+        futures = [] 
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            for hosp in HOSPITALS:
+                futures.append(executor.submit(run_clients, hosp, task))
+        concurrent.futures.wait(futures)
+
+
+        #calculate dot products
+        dotproducts  = privateDotproduct()
+        #get matrix
+        cos_sim = cos_sim_matrix(dotproducts)
+    else:
+        embeddings = np.array([]).reshape(0,1546)
+        for hospid in HOSPITALS:
+            embedding = np.loadtxt(f'{PATH}{hospid}/embedding{SUFFIX}')
+            embeddings = np.concatenate([embeddings, embedding])
+        dotproducts = np.matmul(embeddings, embeddings.transpose())
+        norms = np.linalg.norm(embeddings, axis=1)
+        cos_sim = dotproducts / np.expand_dims(norms, 0) / np.expand_dims(norms, 1)
 
     #cluster patients
     cluster_patients(cos_sim)
@@ -294,7 +313,7 @@ def main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mt', '--modeltype', default = 'emb')
+    parser.add_argument('-mt', '--modeltype', default = 'p_cbfl')
     
     args = parser.parse_args()
     global MODELTYPE
@@ -302,8 +321,8 @@ if __name__ == '__main__':
 
     global PATH
     if MODELTYPE == 'emb':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
     elif MODELTYPE =='p_cbfl':
-        PATH = '/home/xhe33/pcfbl/'
+        PATH = '/home/xhe34/PCFBL_team9/'
         
     main()
