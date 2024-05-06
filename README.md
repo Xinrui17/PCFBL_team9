@@ -20,3 +20,7 @@ Follow these steps to customize the execution of the pipeline according to your 
 
 ## How to Run the Ablation Study
 
+### Running Prediction Only
+To execute predictions only, simply run the notebook from the beginning without making any changes. This will use the pre-trained model to perform predictions as outlined in the notebook steps.
+
+
